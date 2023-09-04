@@ -14,7 +14,7 @@ import (
 type Entity struct {
 	Position gruid.Point
 	Cell     gruid.Cell
-	Prompt   string
+	Persona  string
 }
 
 const (
@@ -26,11 +26,13 @@ const (
 // Model implements gruid.Model interface and represents the
 // application's state.
 type Model struct {
-	grid     gruid.Grid // user interface grid
-	pager    *ui.Pager
-	convo    ConvoGenerator
-	player   Entity
-	entities []Entity
+	grid              gruid.Grid // user interface grid
+	interactingEntity *Entity
+	lastConvo         string
+	pager             *ui.Pager
+	convo             ConvoGenerator
+	player            Entity
+	entities          []Entity
 	// other fields with the state of the application
 }
 
@@ -41,11 +43,34 @@ func (m *Model) PlayRange() gruid.Range {
 	}
 }
 
+func (m *Model) interactWithEntity(input string) {
+	var response string
+	var err error
+	prompt := m.interactingEntity.Persona
+	if input != "" {
+		prompt += fmt.Sprintf(`
+			I tell you "%v".		
+		`, input)
+	}
+	prompt += `
+		Generate three very different conversation options I could say to you.
+		Please number them exactly like '<<1>>', '<<2>>', etc and don't make sentences longer than 150 characters.
+	`
+	m.setPagerText(fmt.Sprintf("Generating conversation for %c...\n\n%v", m.interactingEntity.Cell.Rune, prompt))
+	if response, err = m.convo.GenerateOptionsAndResponses(prompt); err != nil {
+		m.setPagerText(fmt.Sprintf("Error generating convo: \n%v", err))
+		return
+	}
+	m.setPagerText(response)
+	m.lastConvo = response
+}
+
 func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 	// Update your application's state in response to messages.
 	switch msg.(type) {
 	case gruid.MsgKeyDown:
-		switch msg.(gruid.MsgKeyDown).Key {
+		key := msg.(gruid.MsgKeyDown).Key
+		switch key {
 		case gruid.KeyArrowLeft:
 			m.player.Position.X -= 1
 			if !m.player.Position.In(m.PlayRange()) {
@@ -73,16 +98,27 @@ func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 			}
 			for _, entity := range m.entities {
 				if entity.Position.In(closeToPlayer) {
-					m.setPagerText(fmt.Sprintf("Generating conversation for %c...", entity.Cell.Rune))
-					go func() {
-						var response string
-						var err error
-						if response, err = m.convo.GenerateOptionsAndResponses(entity.Prompt); err != nil {
-							m.setPagerText(fmt.Sprintf("Error generating convo: \n%v", err))
-							return
-						}
-						m.setPagerText(response)
-					}()
+					m.interactingEntity = &entity
+					go m.interactWithEntity("")
+				}
+			}
+		case "1", "2", "3":
+			if m.lastConvo == "" {
+				m.setPagerText("ERROR: no conversation options to respond to")
+			} else {
+				searchString := fmt.Sprintf("<<%v>>", key)
+				index := strings.Index(m.lastConvo, searchString)
+				if index == -1 {
+					m.setPagerText(fmt.Sprintf("ERROR: no such conversation option: %v", key))
+				} else {
+					endIndex := strings.Index(m.lastConvo[index+len(searchString):], "<<")
+					if endIndex == -1 {
+						endIndex = len(m.lastConvo)
+					} else {
+						endIndex += index
+					}
+					option := m.lastConvo[index:endIndex]
+					go m.interactWithEntity(option)
 				}
 			}
 		case "q":
@@ -161,10 +197,8 @@ func Run() {
 			{
 				Position: gruid.Point{X: 24, Y: 24},
 				Cell:     gruid.Cell{Rune: '🐶'},
-				Prompt: `Your name is Hendry and you are a Shitzu dog who speaks English very eloquently.
-                        You are angry because a human took your stick. You suspect it was me.
-                        Generate three very different conversation options I could say to you.
-                        Please number them exactly like '1::', '2::', etc and don't make sentences longer than 187 characters.`,
+				Persona: `Your name is Hendry and you are a Shitzu dog who speaks English very eloquently.
+                        You are angry because a human took your stick. You suspect it was me.`,
 			},
 		},
 	}
