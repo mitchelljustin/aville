@@ -164,7 +164,7 @@ func Run() {
 				Prompt: `Your name is Hendry and you are a Shitzu dog who speaks English very eloquently.
                         You are angry because a human took your stick. You suspect it was me.
                         Generate three very different conversation options I could say to you.
-                        Please number them 1-3 and don't make sentences longer than 187 characters.`,
+                        Please number them exactly like '1::', '2::', etc and don't make sentences longer than 187 characters.`,
 			},
 		},
 	}

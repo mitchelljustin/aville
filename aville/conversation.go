@@ -3,6 +3,7 @@ package aville
 import (
 	"context"
 	"github.com/sashabaranov/go-openai"
+	"os"
 )
 
 type ConvoGenerator struct {
@@ -11,7 +12,7 @@ type ConvoGenerator struct {
 
 func NewConvo() ConvoGenerator {
 	return ConvoGenerator{
-		client: openai.NewClient("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"),
+		client: openai.NewClient(os.Getenv("OPENAI_API_KEY")),
 	}
 }
 
