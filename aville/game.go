@@ -12,11 +12,11 @@ import (
 )
 
 type Entity struct {
-	Position      gruid.Point
-	Cell          gruid.Cell
-	Name          string
-	Persona       string
-	LastThingSaid string
+	Position     gruid.Point
+	Cell         gruid.Cell
+	Name         string
+	Persona      string
+	LastResponse string
 }
 
 const (
@@ -50,46 +50,8 @@ func (m *Model) PlayRange() gruid.Range {
 	}
 }
 
-func extractEntityResponseAndPlayerOptions(input string) (string, string) {
-	before, after, found := strings.Cut(input, "\n")
-	if !found {
-		return input, ""
-	}
-	return before, after
-}
-
 func (m *Model) interactWithEntity(input string) {
-	var convo string
-	var err error
-	entity := m.interactingEntity
-	prompt := entity.Persona
-	if input == "" {
-		prompt += `
-			What is the first thing you would say to me?
-			And what are three things I could say in return? Please number them.
-		`
-	} else {
-		m.player.LastThingSaid = input
-		prompt += fmt.Sprintf(`
-			You just said to me: "%v".
-			I responded "%v". How do you respond back?
-		`, entity.LastThingSaid, input)
-	}
-	m.setPagerText(fmt.Sprintf("Generating convo for %v...\nPrompt: \n%v",
-		entity.Name, prompt))
-	if convo, err = m.convo.Generate(prompt); err != nil {
-		m.setPagerText(fmt.Sprintf("Error generating convo: \n%v", err))
-		return
-	}
-	entity.LastThingSaid, m.convoOptions = extractEntityResponseAndPlayerOptions(convo)
-	var pagerText string
-	if input == "" {
-		pagerText = fmt.Sprintf("What do you say?\n\n%v", convo)
-	} else {
-		pagerText = fmt.Sprintf("%v responds:\n\n%v", entity.Name, convo)
-	}
-	m.setPagerText(pagerText)
-	m.convoOptions = convo
+	m.conductConversation(input)
 }
 
 func (m *Model) Update(msg gruid.Msg) gruid.Effect {
@@ -97,63 +59,47 @@ func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 	switch msg.(type) {
 	case gruid.MsgKeyDown:
 		msg := msg.(gruid.MsgKeyDown)
-		key := msg.Key
-		speed := 1
-		if msg.Mod&gruid.ModShift != 0 {
-			speed = 5
+		return m.handleKeyDown(msg)
+	}
+	return nil
+}
+
+func (m *Model) handleKeyDown(msg gruid.MsgKeyDown) gruid.Effect {
+	key := msg.Key
+	speed := 1
+	if msg.Mod&gruid.ModShift != 0 {
+		speed = 5
+	}
+	switch key {
+	case gruid.KeyArrowLeft:
+		m.player.Position.X -= speed
+	case gruid.KeyArrowRight:
+		m.player.Position.X += speed
+	case gruid.KeyArrowDown:
+		m.player.Position.Y += speed
+	case gruid.KeyArrowUp:
+		m.player.Position.Y -= speed
+	case gruid.KeyEnter:
+		closeToPlayer := gruid.Range{
+			Min: m.player.Position.Shift(-1, -1),
+			Max: m.player.Position.Shift(2, 2),
 		}
-		switch key {
-		case gruid.KeyArrowLeft:
-			m.player.Position.X -= speed
-		case gruid.KeyArrowRight:
-			m.player.Position.X += speed
-		case gruid.KeyArrowDown:
-			m.player.Position.Y += speed
-		case gruid.KeyArrowUp:
-			m.player.Position.Y -= speed
-		case gruid.KeyEnter:
-			closeToPlayer := gruid.Range{
-				Min: m.player.Position.Shift(-1, -1),
-				Max: m.player.Position.Shift(2, 2),
-			}
-			for _, entity := range m.entities {
-				if entity.Position.In(closeToPlayer) {
-					m.interactingEntity = &entity
-					var cmd gruid.Cmd = func() gruid.Msg {
-						m.interactWithEntity("")
-						return nil
-					}
-					return cmd
+		for _, entity := range m.entities {
+			if entity.Position.In(closeToPlayer) {
+				m.interactingEntity = &entity
+				var cmd gruid.Cmd = func() gruid.Msg {
+					m.interactWithEntity("")
+					return nil
 				}
+				return cmd
 			}
-		case "[", "]":
-			m.pager.Update(msg)
-		case "1", "2", "3":
-			if m.convoOptions == "" {
-				m.setPagerText("ERROR: no conversation options to respond to")
-			} else {
-				searchString := fmt.Sprintf("%v.", key)
-				index := strings.Index(m.convoOptions, searchString)
-				if index == -1 {
-					m.setPagerText(fmt.Sprintf("ERROR: no such conversation option: %v", key))
-				} else {
-					endIndex := strings.Index(m.convoOptions[index+len(searchString):], "\n")
-					if endIndex == -1 {
-						endIndex = len(m.convoOptions)
-					} else {
-						endIndex += index
-					}
-					option := m.convoOptions[index:endIndex]
-					var cmd gruid.Cmd = func() gruid.Msg {
-						m.interactWithEntity(option)
-						return nil
-					}
-					return cmd
-				}
-			}
-		case "q":
-			return gruid.End()
 		}
+	case "[", "]":
+		m.pager.Update(msg)
+	case "1", "2", "3":
+		return m.handleConversationOption(string(key))
+	case "q":
+		return gruid.End()
 	}
 	playRange := m.PlayRange()
 	if m.player.Position.X < playRange.Min.X {
@@ -171,7 +117,33 @@ func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 	return nil
 }
 
-func (m *Model) setPagerText(text string) {
+func (m *Model) handleConversationOption(chosenOption string) gruid.Effect {
+	if m.convoOptions == "" {
+		m.displayText("ERROR: no ongoing conversation")
+		return nil
+	}
+	searchString := fmt.Sprintf("%v. ", chosenOption)
+	startIndex := strings.Index(m.convoOptions, searchString)
+	if startIndex == -1 {
+		m.displayText(fmt.Sprintf("ERROR: no such conversation response: %v", chosenOption))
+		return nil
+	}
+	startIndex += len(searchString)
+	endIndex := strings.Index(m.convoOptions[startIndex:], "\n")
+	if endIndex == -1 {
+		endIndex = len(m.convoOptions)
+	} else {
+		endIndex += startIndex
+	}
+	response := m.convoOptions[startIndex:endIndex]
+	var cmd gruid.Cmd = func() gruid.Msg {
+		m.interactWithEntity(response)
+		return nil
+	}
+	return cmd
+}
+
+func (m *Model) displayText(text string) {
 	var lines []ui.StyledText
 	for _, line := range strings.Split(text, "\n") {
 		lines = append(lines, ui.Text(strings.TrimSpace(line)))
@@ -262,7 +234,7 @@ func Run() {
 		},
 	}
 
-	m.setPagerText(HelpText)
+	m.displayText(HelpText)
 	// Specify a driver among the provided ones.
 	driver := gruidtcell.NewDriver(gruidtcell.Config{
 		StyleManager: styleManager{},
