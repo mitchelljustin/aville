@@ -23,6 +23,11 @@ const (
 	TextRows       = 15
 	PlayAreaWidth  = 187
 	PlayAreaHeight = 32
+	HelpText       = `
+		Autism Village v0.1
+		Do not play if you are socially well-adjusted.
+		Arrow keys - move. Enter - interact. '[', ']' - Scroll text area left or right.
+    `
 )
 
 // Model implements gruid.Model interface and represents the
@@ -30,7 +35,7 @@ const (
 type Model struct {
 	grid              gruid.Grid // user interface grid
 	interactingEntity *Entity
-	lastConvo         string
+	convoOptions      string
 	pager             *ui.Pager
 	convo             ConvoGenerator
 	player            Entity
@@ -45,6 +50,14 @@ func (m *Model) PlayRange() gruid.Range {
 	}
 }
 
+func extractEntityResponseAndPlayerOptions(input string) (string, string) {
+	before, after, found := strings.Cut(input, "\n")
+	if !found {
+		return input, ""
+	}
+	return before, after
+}
+
 func (m *Model) interactWithEntity(input string) {
 	var convo string
 	var err error
@@ -52,20 +65,23 @@ func (m *Model) interactWithEntity(input string) {
 	prompt := entity.Persona
 	if input == "" {
 		prompt += `
-			Generate three very different conversation options I could say to you.
-			Please number them, and don't make sentences longer than 150 characters.
+			What is the first thing you would say to me?
+			And what are three things I could say in return? Please number them.
 		`
 	} else {
+		m.player.LastThingSaid = input
 		prompt += fmt.Sprintf(`
-			I tell you "%v". How do you respond?
-		`, input)
+			You just said to me: "%v".
+			I responded "%v". How do you respond back?
+		`, entity.LastThingSaid, input)
 	}
-	m.setPagerText(fmt.Sprintf("Generating convo for %c...\nPrompt: \n%v",
-		entity.Cell.Rune, prompt))
-	if convo, err = m.convo.GenerateOptionsAndResponses(prompt); err != nil {
+	m.setPagerText(fmt.Sprintf("Generating convo for %v...\nPrompt: \n%v",
+		entity.Name, prompt))
+	if convo, err = m.convo.Generate(prompt); err != nil {
 		m.setPagerText(fmt.Sprintf("Error generating convo: \n%v", err))
 		return
 	}
+	entity.LastThingSaid, m.convoOptions = extractEntityResponseAndPlayerOptions(convo)
 	var pagerText string
 	if input == "" {
 		pagerText = fmt.Sprintf("What do you say?\n\n%v", convo)
@@ -73,7 +89,7 @@ func (m *Model) interactWithEntity(input string) {
 		pagerText = fmt.Sprintf("%v responds:\n\n%v", entity.Name, convo)
 	}
 	m.setPagerText(pagerText)
-	m.lastConvo = convo
+	m.convoOptions = convo
 }
 
 func (m *Model) Update(msg gruid.Msg) gruid.Effect {
@@ -97,7 +113,7 @@ func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 			m.player.Position.Y -= speed
 		case gruid.KeyEnter:
 			closeToPlayer := gruid.Range{
-				Min: m.player.Position.Shift(-speed, -speed),
+				Min: m.player.Position.Shift(-1, -1),
 				Max: m.player.Position.Shift(2, 2),
 			}
 			for _, entity := range m.entities {
@@ -110,24 +126,24 @@ func (m *Model) Update(msg gruid.Msg) gruid.Effect {
 					return cmd
 				}
 			}
-		case ".", ",":
+		case "[", "]":
 			m.pager.Update(msg)
 		case "1", "2", "3":
-			if m.lastConvo == "" {
+			if m.convoOptions == "" {
 				m.setPagerText("ERROR: no conversation options to respond to")
 			} else {
 				searchString := fmt.Sprintf("%v.", key)
-				index := strings.Index(m.lastConvo, searchString)
+				index := strings.Index(m.convoOptions, searchString)
 				if index == -1 {
 					m.setPagerText(fmt.Sprintf("ERROR: no such conversation option: %v", key))
 				} else {
-					endIndex := strings.Index(m.lastConvo[index+len(searchString):], "\n")
+					endIndex := strings.Index(m.convoOptions[index+len(searchString):], "\n")
 					if endIndex == -1 {
-						endIndex = len(m.lastConvo)
+						endIndex = len(m.convoOptions)
 					} else {
 						endIndex += index
 					}
-					option := m.lastConvo[index:endIndex]
+					option := m.convoOptions[index:endIndex]
 					var cmd gruid.Cmd = func() gruid.Msg {
 						m.interactWithEntity(option)
 						return nil
@@ -200,8 +216,8 @@ func (m *Model) Draw() gruid.Grid {
 
 type styleManager struct{}
 
-func (s styleManager) GetStyle(_ gruid.Style) tcell.Style {
-	return tcell.StyleDefault
+func (s styleManager) GetStyle(style gruid.Style) tcell.Style {
+	return tcell.StyleDefault.Foreground(tcell.Color(style.Fg))
 }
 
 func Run() {
@@ -211,15 +227,17 @@ func Run() {
 		pager: ui.NewPager(ui.PagerConfig{
 			Grid: gruid.NewGrid(PlayAreaWidth, TextRows),
 			Keys: ui.PagerKeys{
-				Right: []gruid.Key{"."},
-				Left:  []gruid.Key{","},
+				Left:  []gruid.Key{"["},
+				Right: []gruid.Key{"]"},
 			},
 			Style: ui.PagerStyle{},
 		}),
 		player: Entity{
 			Position: gruid.Point{X: 8, Y: TextRows + 8},
-			Cell:     gruid.Cell{Rune: '@'},
-			Name:     "Player",
+			Cell: gruid.Cell{Rune: '@', Style: gruid.Style{
+				Fg: 0xF,
+			}},
+			Name: "Player",
 		},
 		entities: []Entity{
 			{
@@ -229,16 +247,22 @@ func Run() {
 				Persona: `
 					Your name is Hendry and you are a Shitzu dog who speaks English very poorly.
 					You are angry because a human took your stick. You suspect it was me.
-					You are also missing your owner, a man named Jlw.
+					You are also missing your owner, a man named Jello.
+				`,
+			},
+			{
+				Position: gruid.Point{X: 32, Y: 32},
+				Cell:     gruid.Cell{Rune: 'ʝ'},
+				Name:     "Gembo",
+				Persona: `
+					You are a smooth talking man named Gembo, 40 years of age, and you talk like you're still stuck in the 30s.
+					You are originally from the Philippines.
 				`,
 			},
 		},
 	}
-	m.setPagerText(`
-    Autism Village v0.1
-    Do not play if you are socially well-adjusted.
-    Arrow keys - move. Enter - interact.
-    `)
+
+	m.setPagerText(HelpText)
 	// Specify a driver among the provided ones.
 	driver := gruidtcell.NewDriver(gruidtcell.Config{
 		StyleManager: styleManager{},

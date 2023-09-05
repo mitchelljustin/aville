@@ -16,11 +16,11 @@ func NewConvo() ConvoGenerator {
 	}
 }
 
-func (g *ConvoGenerator) GenerateOptionsAndResponses(prompt string) (string, error) {
+func (g *ConvoGenerator) Generate(prompt string) (string, error) {
 	resp, err := g.client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
+			Model: openai.GPT3Dot5Turbo16K0613,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
