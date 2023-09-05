@@ -47,7 +47,7 @@ type Model struct {
 
 func (m *Model) PlayRange() gruid.Range {
 	return gruid.Range{
-		Min: m.grid.Range().Min.Shift(1, TextRows),
+		Min: m.grid.Range().Min.Shift(1, TextRows+1),
 		Max: m.grid.Range().Max.Shift(-1, -1),
 	}
 }
@@ -111,7 +111,7 @@ func (m *Model) handleKeyDown(msg gruid.MsgKeyDown) gruid.Effect {
 		m.player.Position.X = playRange.Max.X - 1
 	}
 	if m.player.Position.Y < playRange.Min.Y {
-		m.player.Position.Y = playRange.Min.X
+		m.player.Position.Y = playRange.Min.Y
 	}
 	if m.player.Position.Y >= playRange.Max.Y {
 		m.player.Position.Y = playRange.Max.Y - 1
@@ -211,7 +211,7 @@ func Run() {
 			Style: ui.PagerStyle{},
 		}),
 		player: Entity{
-			Position: gruid.Point{X: 8, Y: TextRows + 8},
+			Position: gruid.Point{X: 1, Y: TextRows + 1},
 			Cell: gruid.Cell{Rune: '@', Style: gruid.Style{
 				Fg: 0xF,
 			}},
@@ -219,21 +219,22 @@ func Run() {
 		},
 		entities: []Entity{
 			{
-				Position: gruid.Point{X: 24, Y: 24},
+				Position: gruid.Point{X: 2, Y: TextRows + 1},
 				Cell:     gruid.Cell{Rune: 'ǭ'},
 				Name:     "Hendry",
 				Persona: `
-					Pretend our name is Hendry and you are a Shitzu dog who speaks English very poorly.
+					Pretend our name is Hendry and you are a small dog who speaks English very poorly.
 					You are angry because a human took your stick. You suspect it was me.
 				`,
 			},
 			{
-				Position: gruid.Point{X: 32, Y: 32},
+				Position: gruid.Point{X: 6, Y: TextRows + 5},
 				Cell:     gruid.Cell{Rune: 'ʝ'},
 				Name:     "Gembo",
 				Persona: `
 					Pretend you are a smooth talking man named Gembo, 40 years of age, 
 					and you talk like you're still stuck in the 1930s.
+					You are trying to flirt with me.
 				`,
 			},
 		},

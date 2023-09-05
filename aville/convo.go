@@ -82,33 +82,31 @@ func (m *Model) conductConversation(input string) {
 	var convo string
 	var err error
 	entity := m.interactingEntity
-	firstPrompt := entity.Persona
-	var secondPrompt string
+	prompt := entity.Persona
 	if input == "" {
-		firstPrompt += `
-			What do you say to me?
+		prompt += `
+			Say something to me.
 
-			And what are three VERY DIFFERENT ways in which I can respond?
+			What are three VERY DIFFERENT ways in which I can respond?
 		`
 	} else {
 		m.player.LastResponse = input
-		firstPrompt += fmt.Sprintf(`
-			You just said to me: "%v".
+		prompt += fmt.Sprintf(`
+			You just said to me: %v.
 
-			I responded "%v". How do you respond back?
+			I said: %v.
 
-			What are three VERY DIFFERENT ways in which I can respond to your response?
-		`, entity.LastResponse, input)
+			Say something back.
+`, entity.LastResponse, input)
 	}
-	prompts := []string{firstPrompt, secondPrompt}
-	firstPrompt = strings.ReplaceAll(firstPrompt, "\t", "")
-	m.displayText(fmt.Sprintf("Generating convo for %v...\nPrompts: \n%v",
-		entity.Name, prompts))
-	if convo, err = m.convo.Generate(prompts); err != nil {
+	prompt = strings.ReplaceAll(prompt, "\t", "")
+	m.displayText(fmt.Sprintf("Generating convo for %v...\nPrompt: \n%v",
+		entity.Name, prompt))
+	if convo, err = m.convo.Generate([]string{prompt}); err != nil {
 		m.displayText(fmt.Sprintf("Error generating convo: \n%v", err))
 		return
 	}
-	fmt.Fprintf(m.logFile, "Prompts: %v\nResponse: %v\n", prompts, convo)
+	fmt.Fprintf(m.logFile, "Prompt: %v\nResponse: %v\n", prompt, convo)
 	entity.LastResponse, m.convoOptions = extractEntityResponseAndPlayerOptions(convo)
 	var pagerText string
 	if input == "" {
