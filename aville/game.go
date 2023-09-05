@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"log"
+	"os"
 	"strings"
 )
 
@@ -40,6 +41,7 @@ type Model struct {
 	convo             ConvoGenerator
 	player            Entity
 	entities          []Entity
+	logFile           *os.File
 	// other fields with the state of the application
 }
 
@@ -193,6 +195,10 @@ func (s styleManager) GetStyle(style gruid.Style) tcell.Style {
 }
 
 func Run() {
+	logFile, err := os.OpenFile("log.txt", os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
 	m := Model{
 		convo: NewConvo(),
 		grid:  gruid.NewGrid(PlayAreaWidth, PlayAreaHeight+TextRows),
@@ -217,9 +223,8 @@ func Run() {
 				Cell:     gruid.Cell{Rune: 'ǭ'},
 				Name:     "Hendry",
 				Persona: `
-					Your name is Hendry and you are a Shitzu dog who speaks English very poorly.
+					Pretend our name is Hendry and you are a Shitzu dog who speaks English very poorly.
 					You are angry because a human took your stick. You suspect it was me.
-					You are also missing your owner, a man named Jello.
 				`,
 			},
 			{
@@ -227,11 +232,12 @@ func Run() {
 				Cell:     gruid.Cell{Rune: 'ʝ'},
 				Name:     "Gembo",
 				Persona: `
-					You are a smooth talking man named Gembo, 40 years of age, and you talk like you're still stuck in the 30s.
-					You are originally from the Philippines.
+					Pretend you are a smooth talking man named Gembo, 40 years of age, 
+					and you talk like you're still stuck in the 1930s.
 				`,
 			},
 		},
+		logFile: logFile,
 	}
 
 	m.displayText(HelpText)

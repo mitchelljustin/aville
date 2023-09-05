@@ -25,6 +25,7 @@ func (g *ConvoGenerator) Generate(prompts []string) (string, error) {
 			Content: `
                         You are generating textual prose content for an interactive visual novel.
                         Number your responses '1.', '2.', '3.', etc.
+						When asked to generate player responses, prefix with "Possible responses:".
                     `,
 		},
 	}
@@ -40,7 +41,7 @@ func (g *ConvoGenerator) Generate(prompts []string) (string, error) {
 	resp, err := g.client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model:    openai.GPT3Dot5Turbo0613,
+			Model:    openai.GPT3Dot5Turbo16K,
 			Messages: promptMessages,
 		},
 	)
@@ -51,25 +52,29 @@ func (g *ConvoGenerator) Generate(prompts []string) (string, error) {
 }
 
 func extractEntityResponseAndPlayerOptions(input string) (string, string) {
-	input = strings.ReplaceAll(input, "Response:", "")
+	entityResponse, playerOptions, found := strings.Cut(input, "Possible responses:")
+	if found {
+		entityResponse = strings.TrimSpace(entityResponse)
+		playerOptions = strings.TrimSpace(playerOptions)
+		return entityResponse, playerOptions
+	}
 	lines := strings.Split(input, "\n")
-	var entityResponse string
 	entityResponseIndex := 0
 	for i, line := range lines {
 		line := strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if strings.Contains(line, "Possible responses") {
+		if entityResponse == "" {
 			entityResponse = line
 			entityResponseIndex = i
 			break
 		}
 	}
 	if entityResponse == "" { // didn't find it
-
+		return input, ""
 	}
-	playerOptions := strings.Join(lines[entityResponseIndex+1:], "\n")
+	playerOptions = strings.Join(lines[entityResponseIndex+1:], "\n")
 	return entityResponse, playerOptions
 }
 
@@ -91,8 +96,9 @@ func (m *Model) conductConversation(input string) {
 			You just said to me: "%v".
 
 			I responded "%v". How do you respond back?
+
+			What are three VERY DIFFERENT ways in which I can respond to your response?
 		`, entity.LastResponse, input)
-		secondPrompt = "What are three VERY DIFFERENT ways in which I can respond?"
 	}
 	prompts := []string{firstPrompt, secondPrompt}
 	firstPrompt = strings.ReplaceAll(firstPrompt, "\t", "")
@@ -102,11 +108,12 @@ func (m *Model) conductConversation(input string) {
 		m.displayText(fmt.Sprintf("Error generating convo: \n%v", err))
 		return
 	}
+	fmt.Fprintf(m.logFile, "Prompts: %v\nResponse: %v\n", prompts, convo)
 	entity.LastResponse, m.convoOptions = extractEntityResponseAndPlayerOptions(convo)
 	var pagerText string
 	if input == "" {
-		pagerText = fmt.Sprintf("%v says: %v. \n\nHow do you respond?\n%v",
-			entity.Name, entity.LastResponse, m.convoOptions)
+		pagerText = fmt.Sprintf("%v. \n\nHow do you respond?\n%v",
+			entity.LastResponse, m.convoOptions)
 	} else {
 		pagerText = entity.LastResponse
 	}
