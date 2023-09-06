@@ -191,7 +191,14 @@ func (m *Model) Draw() gruid.Grid {
 type styleManager struct{}
 
 func (s styleManager) GetStyle(style gruid.Style) tcell.Style {
-	return tcell.StyleDefault.Foreground(tcell.Color(style.Fg))
+	termStyle := tcell.StyleDefault
+	switch style.Fg {
+	case 1:
+		termStyle = termStyle.Foreground(tcell.ColorMaroon).Attributes(tcell.AttrBold)
+	case 2:
+		termStyle = termStyle.Foreground(tcell.ColorLimeGreen).Attributes(tcell.AttrBold)
+	}
+	return termStyle
 }
 
 func Run() {
@@ -213,15 +220,17 @@ func Run() {
 		player: Entity{
 			Position: gruid.Point{X: 1, Y: TextRows + 1},
 			Cell: gruid.Cell{Rune: '@', Style: gruid.Style{
-				Fg: 0xF,
+				Fg: 1,
 			}},
 			Name: "Player",
 		},
 		entities: []Entity{
 			{
 				Position: gruid.Point{X: 2, Y: TextRows + 1},
-				Cell:     gruid.Cell{Rune: 'ǭ'},
-				Name:     "Hendry",
+				Cell: gruid.Cell{Rune: 'ǭ', Style: gruid.Style{
+					Fg: 2,
+				}},
+				Name: "Hendry",
 				Persona: `
 					Pretend our name is Hendry and you are a small dog who speaks English very poorly.
 					You are angry because a human took your stick. You suspect it was me.
@@ -229,8 +238,10 @@ func Run() {
 			},
 			{
 				Position: gruid.Point{X: 6, Y: TextRows + 5},
-				Cell:     gruid.Cell{Rune: 'ʝ'},
-				Name:     "Gembo",
+				Cell: gruid.Cell{Rune: 'ʝ', Style: gruid.Style{
+					Fg: 2,
+				}},
+				Name: "Gembo",
 				Persona: `
 					Pretend you are a smooth talking man named Gembo, 40 years of age, 
 					and you talk like you're still stuck in the 1930s.
